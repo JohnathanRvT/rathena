@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-import yaml
 import os
 import re
 import argparse
+import sys
 from typing import Dict, List, Any
+
+try:
+    import yaml
+except ImportError:
+    print("Error: The 'PyYAML' module is required but not installed.")
+    print("Please install it using: pip install PyYAML")
+    sys.exit(1)
 
 class ItemDatabase:
     def __init__(self):
@@ -11,6 +18,7 @@ class ItemDatabase:
 
     def load_from_yml(self, filepath):
         if not os.path.exists(filepath):
+            print(f"Warning: Item database not found: {filepath}")
             return
         with open(filepath, 'r') as f:
             data = yaml.safe_load(f)
@@ -42,6 +50,7 @@ class MonsterDatabase:
 
     def load_from_yml(self, filepath):
         if not os.path.exists(filepath):
+            print(f"Warning: Monster database not found: {filepath}")
             return
         with open(filepath, 'r') as f:
             data = yaml.safe_load(f)
@@ -56,7 +65,7 @@ class MonsterDatabase:
 
                     self.mobs[mob_id] = {
                         'name': mob.get('Name'),
-                        'drops': drops + mvp_drops
+                        'drops': (drops if drops else []) + (mvp_drops if mvp_drops else [])
                     }
 
 class MapSpawnDatabase:
@@ -65,10 +74,8 @@ class MapSpawnDatabase:
 
     def load_from_conf(self, conf_path):
         if not os.path.exists(conf_path):
+            print(f"Warning: Monster script config not found: {conf_path}")
             return
-
-        base_dir = os.path.dirname(conf_path)
-        # Handle relative paths in conf. Actually rAthena paths in conf are usually relative to root.
 
         with open(conf_path, 'r') as f:
             for line in f:
@@ -82,8 +89,6 @@ class MapSpawnDatabase:
             return
 
         # Regex for: map,x,y,xs,ys	(monster|boss_monster)	name	id,count,time...
-        # Example: prt_fild00,0,0	monster	Roda Frog	1012,169,5000
-        # Example: anthell02,0,0,0,0	boss_monster	Maya	1147,1,7200000,600000,1
         spawn_re = re.compile(r'^([^,]+),[\d,]+\s+(?:monster|boss_monster)\s+([^\t]+)\s+(\d+),(\d+)')
 
         with open(script_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -110,7 +115,6 @@ class ZenyCalculator:
 
     def calculate_oc_modifier(self, level):
         if level <= 0: return 0.0
-        # rate = 5+skill*2-((skill==10)? 1:0);
         rate = 5 + level * 2 - (1 if level == 10 else 0)
         return rate / 100.0
 
@@ -133,11 +137,6 @@ class ZenyCalculator:
             item = self.item_db.items[item_name]
             sell_price = item['sell']
 
-            # rate = (int32)( 0.5 + drop_rate * drop_rate_bonus / 100. );
-            # Then it's multiplied by base_rate (implied in server configs, but here base_rate is total rate)
-            # Actually server base_rate is usually handled by factor in mob_getdroprate
-
-            # Simplified: (rate/10000) * base_rate * (drop_bonus/100)
             effective_rate = (drop_rate * base_rate * drop_bonus) / 1000000.0
             if effective_rate > 1.0: effective_rate = 1.0
 
@@ -179,6 +178,7 @@ class ZenyCalculator:
 
 def main():
     parser = argparse.ArgumentParser(description='rAthena Zeny Rate Calculator')
+    parser.add_argument('--pre-re', action='store_true', help='Use Pre-Renewal database and NPC paths')
     parser.add_argument('--base-rate', type=int, default=1, help='Base server drop rate (e.g. 1, 10, 100)')
     parser.add_argument('--oc', type=int, default=0, choices=range(0, 11), help='Merchant Overcharge level (0-10)')
     parser.add_argument('--gum', action='store_true', help='Enable Bubble Gum (+100%% drop rate)')
@@ -189,17 +189,19 @@ def main():
 
     args = parser.parse_args()
 
-    print("Loading databases...")
+    mode_dir = "pre-re" if args.pre_re else "re"
+    print(f"Loading databases ({'Pre-Renewal' if args.pre_re else 'Renewal'})...")
+
     item_db = ItemDatabase()
-    item_db.load_from_yml('db/re/item_db_etc.yml')
-    item_db.load_from_yml('db/re/item_db_equip.yml')
-    item_db.load_from_yml('db/re/item_db_usable.yml')
+    item_db.load_from_yml(f'db/{mode_dir}/item_db_etc.yml')
+    item_db.load_from_yml(f'db/{mode_dir}/item_db_equip.yml')
+    item_db.load_from_yml(f'db/{mode_dir}/item_db_usable.yml')
 
     mob_db = MonsterDatabase()
-    mob_db.load_from_yml('db/re/mob_db.yml')
+    mob_db.load_from_yml(f'db/{mode_dir}/mob_db.yml')
 
     spawn_db = MapSpawnDatabase()
-    spawn_db.load_from_conf('npc/re/scripts_monsters.conf')
+    spawn_db.load_from_conf(f'npc/{mode_dir}/scripts_monsters.conf')
 
     calc = ZenyCalculator(item_db, mob_db, spawn_db)
 
