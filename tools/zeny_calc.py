@@ -12,15 +12,28 @@ except ImportError:
     print("Please install it using: pip install PyYAML")
     sys.exit(1)
 
+# Detect rAthena Root
+def get_rathena_root():
+    # Start from the script's directory
+    current = os.path.dirname(os.path.abspath(__file__))
+    while current != os.path.dirname(current): # Stop at root
+        if os.path.isdir(os.path.join(current, 'db')) and os.path.isdir(os.path.join(current, 'npc')):
+            return current
+        current = os.path.dirname(current)
+    # Fallback to CWD
+    return os.getcwd()
+
+ROOT = get_rathena_root()
+
 class ItemDatabase:
     def __init__(self):
         self.items = {}
 
     def load_from_yml(self, filepath):
-        if not os.path.exists(filepath):
-            print(f"Warning: Item database not found: {filepath}")
+        abs_path = os.path.join(ROOT, filepath)
+        if not os.path.exists(abs_path):
             return
-        with open(filepath, 'r') as f:
+        with open(abs_path, 'r') as f:
             data = yaml.safe_load(f)
             if data and 'Body' in data:
                 for item in data['Body']:
@@ -49,10 +62,10 @@ class MonsterDatabase:
         self.mobs = {}
 
     def load_from_yml(self, filepath):
-        if not os.path.exists(filepath):
-            print(f"Warning: Monster database not found: {filepath}")
+        abs_path = os.path.join(ROOT, filepath)
+        if not os.path.exists(abs_path):
             return
-        with open(filepath, 'r') as f:
+        with open(abs_path, 'r') as f:
             data = yaml.safe_load(f)
             if data and 'Body' in data:
                 for mob in data['Body']:
@@ -73,11 +86,12 @@ class MapSpawnDatabase:
         self.spawns = {} # map_name -> [ {mob_id, count} ]
 
     def load_from_conf(self, conf_path):
-        if not os.path.exists(conf_path):
-            print(f"Warning: Monster script config not found: {conf_path}")
+        abs_path = os.path.join(ROOT, conf_path)
+        if not os.path.exists(abs_path):
+            print(f"Warning: Monster script config not found: {abs_path}")
             return
 
-        with open(conf_path, 'r') as f:
+        with open(abs_path, 'r') as f:
             for line in f:
                 line = line.strip()
                 if line.startswith('npc:'):
@@ -85,23 +99,27 @@ class MapSpawnDatabase:
                     self.load_from_script(npc_path)
 
     def load_from_script(self, script_path):
-        if not os.path.exists(script_path):
+        abs_path = os.path.join(ROOT, script_path)
+        if not os.path.exists(abs_path):
             return
 
         # Regex for: map,x,y,xs,ys	(monster|boss_monster)	name	id,count,time...
-        spawn_re = re.compile(r'^([^,]+),[\d,]+\s+(?:monster|boss_monster)\s+([^\t]+)\s+(\d+),(\d+)')
+        # Variations in whitespace and optional time/event fields.
+        spawn_re = re.compile(r'^([^,]+),[\d,]+\s+(?:monster|boss_monster)\s+[^\t]+\s+(\d+),(\d+)')
 
-        with open(script_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(abs_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith('//'):
                     continue
 
+                # Some scripts use tabs, some use spaces.
+                # Normalize line to handle different spacing between fields.
                 match = spawn_re.match(line)
                 if match:
                     map_name = match.group(1)
-                    mob_id = int(match.group(3))
-                    count = int(match.group(4))
+                    mob_id = int(match.group(2))
+                    count = int(match.group(3))
 
                     if map_name not in self.spawns:
                         self.spawns[map_name] = []
@@ -190,7 +208,7 @@ def main():
     args = parser.parse_args()
 
     mode_dir = "pre-re" if args.pre_re else "re"
-    print(f"Loading databases ({'Pre-Renewal' if args.pre_re else 'Renewal'})...")
+    print(f"Loading databases ({'Pre-Renewal' if args.pre_re else 'Renewal'}) from: {ROOT}")
 
     item_db = ItemDatabase()
     item_db.load_from_yml(f'db/{mode_dir}/item_db_etc.yml')
@@ -237,6 +255,8 @@ def main():
     else:
         print(f"\n--- Top {args.top_maps} Maps by Total Zeny (per full spawn) ---")
         top_maps = calc.get_all_maps_zeny(args.base_rate, args.oc, args.gum)
+        if not top_maps:
+            print("No map spawns found. Check npc/re/scripts_monsters.conf or npc/pre-re/scripts_monsters.conf")
         for i, m in enumerate(top_maps[:args.top_maps]):
             print(f"{i+1}. {m['map']}: {m['zeny']:.2f} z")
 
