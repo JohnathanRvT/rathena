@@ -1,0 +1,271 @@
+@page "/simulator"
+@using rAthena.Simulator.Core
+@using rAthena.Simulator.Core.Models
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<MudText Typo="Typo.h4" GutterBottom="true">Character Simulator</MudText>
+
+@if (simulatorData == null)
+{
+    <MudProgressCircular Color="Color.Default" Indeterminate="true" />
+}
+else
+{
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
+        <MudTabPanel Text="Character">
+            <MudGrid Class="pa-4">
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6">Character Input</MudText>
+                        <MudTextField Value="currentBuild.Name" Label="Build Name" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.Name = s; Calculate(); })" />
+
+                        <MudSelect T="string" Label="Job" Value="currentBuild.Job" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.Job = s; Calculate(); })">
+                            @foreach (var job in simulatorData.Jobs.OrderBy(j => j.Name))
+                            {
+                                <MudSelectItem Value="@job.Name">@job.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        <MudNumericField Value="currentBuild.BaseLevel" Label="Base Level" Min="1" Max="99" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((int v) => { currentBuild.BaseLevel = v; Calculate(); })" />
+                        <MudNumericField Value="currentBuild.JobLevel" Label="Job Level" Min="1" Max="70" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((int v) => { currentBuild.JobLevel = v; Calculate(); })" />
+
+                        <MudSelect T="string" Label="Weapon Type" Value="currentBuild.WeaponType" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.WeaponType = s; Calculate(); })">
+                            <MudSelectItem Value="@("Fist")">Fist</MudSelectItem>
+                            <MudSelectItem Value="@("Dagger")">Dagger</MudSelectItem>
+                            <MudSelectItem Value="@("1hSword")">1h Sword</MudSelectItem>
+                            <MudSelectItem Value="@("2hSword")">2h Sword</MudSelectItem>
+                            <MudSelectItem Value="@("1hSpear")">1h Spear</MudSelectItem>
+                            <MudSelectItem Value="@("2hSpear")">2h Spear</MudSelectItem>
+                            <MudSelectItem Value="@("1hAxe")">1h Axe</MudSelectItem>
+                            <MudSelectItem Value="@("2hAxe")">2h Axe</MudSelectItem>
+                            <MudSelectItem Value="@("Mace")">Mace</MudSelectItem>
+                            <MudSelectItem Value="@("2hMace")">2h Mace</MudSelectItem>
+                            <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
+                            <MudSelectItem Value="@("2hStaff")">2h Staff</MudSelectItem>
+                            <MudSelectItem Value="@("Bow")">Bow</MudSelectItem>
+                            <MudSelectItem Value="@("Knuckle")">Knuckle</MudSelectItem>
+                            <MudSelectItem Value="@("Musical")">Musical</MudSelectItem>
+                            <MudSelectItem Value="@("Whip")">Whip</MudSelectItem>
+                            <MudSelectItem Value="@("Book")">Book</MudSelectItem>
+                            <MudSelectItem Value="@("Katar")">Katar</MudSelectItem>
+                        </MudSelect>
+
+                        <MudSelect T="string" Label="Combat Style" Value="currentBuild.CombatStyle" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.CombatStyle = s; Calculate(); })">
+                            <MudSelectItem Value="@("Auto-Attack")">Auto-Attack</MudSelectItem>
+                            @foreach (var skill in simulatorData.Skills.Take(100))
+                            {
+                                <MudSelectItem Value="@skill.Name">@skill.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        <MudGrid>
+                            <MudItem xs="4"><MudNumericField Value="currentBuild.Str" Label="STR" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Str = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="4"><MudNumericField Value="currentBuild.Agi" Label="AGI" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Agi = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="4"><MudNumericField Value="currentBuild.Vit" Label="VIT" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Vit = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="4"><MudNumericField Value="currentBuild.Int" Label="INT" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Int = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="4"><MudNumericField Value="currentBuild.Dex" Label="DEX" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Dex = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="4"><MudNumericField Value="currentBuild.Luk" Label="LUK" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Luk = v; Calculate(); })" /></MudItem>
+                        </MudGrid>
+
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveBuild" Class="mt-4">Save Build</MudButton>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6">Calculated Stats</MudText>
+                        @if (stats != null)
+                        {
+                            <MudList T="string">
+                                <MudListItem>HP: @stats.MaxHp</MudListItem>
+                                <MudListItem>SP: @stats.MaxSp</MudListItem>
+                                <MudListItem>ATK: @stats.Atk</MudListItem>
+                                <MudListItem>MATK: @stats.MinMatk - @stats.MaxMatk</MudListItem>
+                                <MudListItem>ASPD: @stats.Aspd.ToString("F2")</MudListItem>
+                                <MudListItem>HIT: @stats.Hit</MudListItem>
+                                <MudListItem>FLEE: @stats.Flee</MudListItem>
+                                <MudListItem>Cast Time reduction: @((1 - stats.VariableCastTimeRatio).ToString("P0"))</MudListItem>
+                            </MudList>
+                        }
+                    </MudPaper>
+
+                    <MudPaper Class="pa-4 mt-4">
+                        <MudText Typo="Typo.h6">Saved Builds</MudText>
+                        <MudList T="CharacterBuild">
+                            @foreach (var b in savedBuilds)
+                            {
+                                <MudListItem OnClick="@(() => LoadBuild(b))">@b.Name (@b.Job)</MudListItem>
+                            }
+                        </MudList>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Recommendations">
+            <MudGrid Class="pa-4">
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6">Settings</MudText>
+                        <MudNumericField @bind-Value="baseExpRate" Label="Base Exp Rate" Min="1" />
+                        <MudNumericField @bind-Value="dropRate" Label="Drop Rate" Min="1" />
+                        <MudSelect T="double" Label="Exp Manual" @bind-Value="expManual">
+                            <MudSelectItem Value="1.0">None</MudSelectItem>
+                            <MudSelectItem Value="1.5">Exp Manual (50%)</MudSelectItem>
+                            <MudSelectItem Value="2.0">Battle Manual (100%)</MudSelectItem>
+                            <MudSelectItem Value="3.0">Special Manual (200%)</MudSelectItem>
+                        </MudSelect>
+                        <MudCheckBox @bind-Value="useGum" Label="Use Bubble Gum" />
+                        <MudCheckBox @bind-Value="useOc" Label="Use Overcharge" />
+                        <MudCheckBox @bind-Value="excludeMvp" Label="Exclude MVPs" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RunSimulation" Class="mt-4" FullWidth="true">Run Recommendation</MudButton>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <MudTable Items="recommendations" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isSimulating">
+                        <HeaderContent>
+                            <MudTh></MudTh>
+                            <MudTh>Map</MudTh>
+                            <MudTh>Exp/hr</MudTh>
+                            <MudTh>Zeny/hr</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudIconButton Icon="@(context.ShowDetails ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" OnClick="@(() => context.ShowDetails = !context.ShowDetails)" />
+                            </MudTd>
+                            <MudTd DataLabel="Map">@context.MapName</MudTd>
+                            <MudTd DataLabel="Exp/hr">@context.ExpPerHour.ToString("N0")</MudTd>
+                            <MudTd DataLabel="Zeny/hr">@context.ZenyPerHour.ToString("N0")</MudTd>
+                        </RowTemplate>
+                        <ChildRowContent>
+                            @if (context.ShowDetails)
+                            {
+                                <MudTr>
+                                    <td colspan="4">
+                                        <MudCard Elevation="0" Class="pa-4">
+                                            <MudTable Items="@context.MobDetails" Context="mob" Dense="true" Elevation="0">
+                                                <HeaderContent>
+                                                    <MudTh>Monster</MudTh>
+                                                    <MudTh>Kills/hr</MudTh>
+                                                    <MudTh>Exp/hr</MudTh>
+                                                    <MudTh>Zeny/hr</MudTh>
+                                                </HeaderContent>
+                                                <RowTemplate>
+                                                    <MudTd>@mob.MobName</MudTd>
+                                                    <MudTd>@mob.KillsPerHour.ToString("N1")</MudTd>
+                                                    <MudTd>@mob.ExpPerHour.ToString("N0")</MudTd>
+                                                    <MudTd>@mob.ZenyPerHour.ToString("N0")</MudTd>
+                                                </RowTemplate>
+                                            </MudTable>
+                                        </MudCard>
+                                    </td>
+                                </MudTr>
+                            }
+                        </ChildRowContent>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    private SimulatorData? simulatorData;
+    private CharacterBuild currentBuild = new();
+    private CharacterStats? stats;
+    private List<CharacterBuild> savedBuilds = new();
+
+    private int baseExpRate = 1;
+    private int dropRate = 1;
+    private double expManual = 1.0;
+    private bool useGum = false;
+    private bool useOc = false;
+    private bool excludeMvp = true;
+    private bool isSimulating = false;
+    private List<MapRecommendation> recommendations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        simulatorData = await Http.GetFromJsonAsync<SimulatorData>("data/data.json");
+        await LoadSavedBuilds();
+        Calculate();
+    }
+
+    private void Calculate()
+    {
+        if (simulatorData != null)
+        {
+            stats = Calculator.CalculateStats(currentBuild, simulatorData);
+        }
+    }
+
+    private async Task SaveBuild()
+    {
+        if (string.IsNullOrWhiteSpace(currentBuild.Name)) currentBuild.Name = "Unnamed";
+        var existing = savedBuilds.FirstOrDefault(b => b.Name == currentBuild.Name);
+        if (existing != null) savedBuilds.Remove(existing);
+
+        savedBuilds.Add(new CharacterBuild {
+            Name = currentBuild.Name,
+            Job = currentBuild.Job,
+            BaseLevel = currentBuild.BaseLevel,
+            JobLevel = currentBuild.JobLevel,
+            Str = currentBuild.Str,
+            Agi = currentBuild.Agi,
+            Vit = currentBuild.Vit,
+            Int = currentBuild.Int,
+            Dex = currentBuild.Dex,
+            Luk = currentBuild.Luk,
+            WeaponType = currentBuild.WeaponType,
+            CombatStyle = currentBuild.CombatStyle
+        });
+
+        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "savedBuilds", JsonSerializer.Serialize(savedBuilds));
+    }
+
+    private async Task LoadSavedBuilds()
+    {
+        var json = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "savedBuilds");
+        if (!string.IsNullOrEmpty(json))
+        {
+            savedBuilds = JsonSerializer.Deserialize<List<CharacterBuild>>(json) ?? new();
+        }
+    }
+
+    private void LoadBuild(CharacterBuild b)
+    {
+        currentBuild = new CharacterBuild {
+            Name = b.Name,
+            Job = b.Job,
+            BaseLevel = b.BaseLevel,
+            JobLevel = b.JobLevel,
+            Str = b.Str,
+            Agi = b.Agi,
+            Vit = b.Vit,
+            Int = b.Int,
+            Dex = b.Dex,
+            Luk = b.Luk,
+            WeaponType = b.WeaponType,
+            CombatStyle = b.CombatStyle
+        };
+        Calculate();
+    }
+
+    private void RunSimulation()
+    {
+        if (simulatorData == null || stats == null) return;
+        isSimulating = true;
+
+        recommendations = RecommendationEngine.GetRecommendations(stats, currentBuild, simulatorData, new SimulationSettings {
+            BaseExpRate = baseExpRate,
+            DropRate = dropRate,
+            ExpManual = expManual,
+            UseGum = useGum,
+            UseOc = useOc,
+            ExcludeMvp = excludeMvp
+        });
+
+        isSimulating = false;
+    }
+}
