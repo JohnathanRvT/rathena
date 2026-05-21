@@ -76,12 +76,16 @@ def parse_produce_db(file_path):
 
 def parse_mob_db(file_path, name_to_id):
     item_drops = {}
+    mob_id_to_name = {}
     data = load_yaml(file_path)
     if not data or 'Body' not in data:
-        return item_drops
+        return item_drops, mob_id_to_name
 
     for mob in data['Body']:
+        mob_id = mob.get('Id')
         mob_name = mob.get('Name')
+        mob_id_to_name[mob_id] = mob_name
+
         drops = mob.get('Drops', [])
         mvp_drops = mob.get('MvpDrops', [])
 
@@ -97,6 +101,7 @@ def parse_mob_db(file_path, name_to_id):
                 if item_id not in item_drops:
                     item_drops[item_id] = []
                 item_drops[item_id].append({
+                    'mob_id': mob_id,
                     'mob': mob_name,
                     'rate': rate,
                     'mvp': is_mvp
@@ -105,7 +110,7 @@ def parse_mob_db(file_path, name_to_id):
     for item_id in item_drops:
         item_drops[item_id].sort(key=lambda x: x['rate'], reverse=True)
 
-    return item_drops
+    return item_drops, mob_id_to_name
 
 def parse_quest_scripts(quest_dir):
     quest_items = {}
@@ -186,6 +191,65 @@ def parse_lua_item_info(file_path):
         overrides[item_id] = item_data
     return overrides
 
+def parse_shops(shop_files):
+    item_shops = {}
+    for shop_file in shop_files:
+        if not os.path.exists(shop_file):
+            continue
+
+        with open(shop_file, 'r', encoding='latin-1') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('//'): continue
+
+                match = re.match(r'^([^,]+),.*?\t(shop|cashshop|itemshop)\t([^\t]+)\t(\d+),(.*)$', line)
+                if match:
+                    map_name = match.group(1)
+                    shop_type = match.group(2)
+                    shop_name = match.group(3).split('#')[0]
+                    items_str = match.group(5)
+
+                    for item_entry in items_str.split(','):
+                        if not item_entry: continue
+                        iid_str = item_entry.split(':')[0]
+                        try:
+                            iid = int(iid_str)
+                            if iid not in item_shops:
+                                item_shops[iid] = []
+                            item_shops[iid].append({
+                                'name': shop_name,
+                                'map': map_name,
+                                'type': shop_type
+                            })
+                        except ValueError:
+                            continue
+    return item_shops
+
+def parse_spawns(spawn_dir):
+    # Mapping of Mob ID -> List of Map Names
+    mob_spawns = {}
+    if not os.path.exists(spawn_dir):
+        return mob_spawns
+
+    for root, _, files in os.walk(spawn_dir):
+        for file in files:
+            if file.endswith('.txt'):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('//'): continue
+
+                        # prt_fild00,0,0	monster	Creamy	1018,10
+                        match = re.match(r'^([^,]+),.*?\t(monster|boss_monster)\t[^\t]+\t(\d+),', line)
+                        if match:
+                            map_name = match.group(1)
+                            mob_id = int(match.group(3))
+                            if mob_id not in mob_spawns:
+                                mob_spawns[mob_id] = set()
+                            mob_spawns[mob_id].add(map_name)
+    return {k: sorted(list(v)) for k, v in mob_spawns.items()}
+
 def clean_script(script):
     if not script: return ""
     lines = []
@@ -197,7 +261,7 @@ def clean_script(script):
             lines.append(line)
     return "\\n".join(lines)
 
-def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, tipboxes):
+def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, item_shops, mob_spawns, tipboxes):
     lines = []
 
     if item.get('Type') == 'Weapon':
@@ -245,7 +309,27 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
 
     item_id = item.get('Id')
 
-    # 4. Crafting / Usage
+    # 4. Sold By
+    if item_id in item_shops:
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Sold By ---^000000")
+        if len(item_shops[item_id]) > 3:
+            tip_id = 30000 + item_id
+            shop_page = f"NPCs selling {item.get('Name')}:\\n"
+            for shop in item_shops[item_id]:
+                type_str = f" [{shop['type'].upper()}]" if shop['type'] != 'shop' else ""
+                shop_page += f"- {shop['name']} ({shop['map']}){type_str}\\n"
+            tipboxes[tip_id] = {
+                'Title': f"Sellers: {item.get('Name')}",
+                'Page': [shop_page]
+            }
+            lines.append(f" <TIPBOX>View Merchant Locations<INFO>{tip_id}</INFO></TIPBOX>")
+        else:
+            for shop in item_shops[item_id]:
+                type_str = f" [{shop['type'].upper()}]" if shop['type'] != 'shop' else ""
+                lines.append(f"- {shop['name']} ({shop['map']}){type_str}")
+
+    # 5. Crafting / Usage
     aegis_name = item.get('AegisName')
     if aegis_name in arrow_crafts:
         lines.append("^FFFFFF_^000000")
@@ -291,7 +375,7 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
                 ing_display = ing_item.get('Name', f"Item {ing_id}")
                 lines.append(f"- <ITEM>{ing_display}<INFO>{ing_id}</INFO></ITEM> x{amount}")
 
-    # 5. Combos
+    # 6. Combos
     if item_id in item_combos:
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Set Bonus ---^000000")
@@ -302,7 +386,7 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
             for bline in bonus.split("\\n"):
                 lines.append(f"  ^0000FF{bline}^000000")
 
-    # 6. Quests
+    # 7. Quests
     if item_id in quest_items:
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Quest Related ---^000000")
@@ -320,18 +404,28 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
             for q in quest_items[item_id]:
                 lines.append(f"- {q}")
 
-    # 7. Drops
+    # 8. Drops
     if item_id in item_drops:
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Dropped By ---^000000")
         for drop in item_drops[item_id][:5]:
             mvp_str = " (MVP)" if drop['mvp'] else ""
             rate = drop['rate'] / 100
-            lines.append(f"- {drop['mob']}:^009900 {rate}%^000000{mvp_str}")
+            drop_line = f"- {drop['mob']}:^009900 {rate}%^000000{mvp_str}"
+
+            # Add spawn maps if available
+            maps = mob_spawns.get(drop['mob_id'], [])
+            if maps:
+                # Limit to 3 maps in main description
+                map_str = ", ".join(maps[:3])
+                if len(maps) > 3: map_str += "..."
+                drop_line += f" ({map_str})"
+
+            lines.append(drop_line)
         if len(item_drops[item_id]) > 5:
             lines.append(f"... and {len(item_drops[item_id]) - 5} more.")
 
-    # 8. Original Script
+    # 9. Original Script
     if item.get('Script'):
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Effect ---^000000")
@@ -341,12 +435,12 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
 
     return "\\n".join(lines)
 
-def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, lua_overrides, tipboxes, output_file):
+def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, item_shops, mob_spawns, lua_overrides, tipboxes, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("tbl = {\n")
         for item_id in sorted(items.keys()):
             item = items[item_id]
-            desc = get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, tipboxes)
+            desc = get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, item_shops, mob_spawns, tipboxes)
 
             overrides = lua_overrides.get(item_id, {})
             unid_name = overrides.get('unidentifiedDisplayName', item.get('Name'))
@@ -361,7 +455,6 @@ def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_d
             f.write(f"    identifiedDisplayName = \"{id_name}\",\n")
             f.write(f"    identifiedResourceName = \"{id_res}\",\n")
             f.write(f"    identifiedDescriptionName = {{\n")
-            # Splitting by \\n to ensure each line in the Lua array is correctly quoted
             for line in desc.split("\\n"):
                 line = line.replace('"', '\\"')
                 f.write(f"      \"{line}\",\n")
@@ -404,6 +497,8 @@ def main():
     produce_db_path = 'db/pre-re/produce_db.txt'
     mob_db_path = 'db/pre-re/mob_db.yml'
     combo_db_path = 'db/pre-re/item_combos.yml'
+    shop_files = ['npc/pre-re/merchants/shops.txt', 'npc/merchants/shops.txt', 'npc/merchants/cash_trader.txt']
+    spawn_dir = 'npc/pre-re/mobs'
     quest_dir = 'npc/pre-re/quests'
     input_lua = 'itemInfo.lua'
     output_lua = 'itemInfo_new.lua'
@@ -420,7 +515,10 @@ def main():
     ing_to_res, res_to_ing = parse_produce_db(produce_db_path)
 
     print("Loading monster database for drops...")
-    item_drops = parse_mob_db(mob_db_path, name_to_id)
+    item_drops, mob_id_to_name = parse_mob_db(mob_db_path, name_to_id)
+
+    print("Parsing monster spawns...")
+    mob_spawns = parse_spawns(spawn_dir)
 
     print("Parsing quest scripts for item relevance...")
     quest_items = parse_quest_scripts(quest_dir)
@@ -431,10 +529,13 @@ def main():
     print("Parsing existing itemInfo.lua for overrides...")
     lua_overrides = parse_lua_item_info(input_lua)
 
+    print("Loading shop data...")
+    item_shops = parse_shops(shop_files)
+
     tipboxes = {}
 
     print(f"Generating {output_lua}...")
-    generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, lua_overrides, tipboxes, output_lua)
+    generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, item_shops, mob_spawns, lua_overrides, tipboxes, output_lua)
 
     print(f"Generating {output_tipbox}...")
     generate_tipbox(tipboxes, output_tipbox)
