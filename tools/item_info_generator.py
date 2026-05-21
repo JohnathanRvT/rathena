@@ -134,7 +134,6 @@ def parse_quest_scripts(quest_dir):
     return {k: sorted(list(v)) for k, v in quest_items.items()}
 
 def parse_item_combos(file_path, name_to_id, items):
-    # Mapping of Item ID -> List of Combos
     item_combos = {}
     data = load_yaml(file_path)
     if not data or 'Body' not in data:
@@ -157,8 +156,6 @@ def parse_item_combos(file_path, name_to_id, items):
                 for iid in combo_items_ids:
                     if iid not in item_combos:
                         item_combos[iid] = []
-
-                    # Other items in this combo
                     others = [items[oid].get('Name') for oid in combo_items_ids if oid != iid]
                     item_combos[iid].append({
                         'others': others,
@@ -166,41 +163,64 @@ def parse_item_combos(file_path, name_to_id, items):
                     })
     return item_combos
 
-def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos):
+def parse_lua_item_info(file_path):
+    overrides = {}
+    if not os.path.exists(file_path):
+        return overrides
+
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+    blocks = re.findall(r'\[(\d+)\]\s*=\s*\{(.*?)\n\s*\},', content, re.DOTALL)
+    for item_id_str, block_content in blocks:
+        item_id = int(item_id_str)
+        item_data = {}
+
+        res_matches = re.findall(r'(\w+)\s*=\s*"([^"]*)"', block_content)
+        for field, value in res_matches:
+            item_data[field] = value
+
+        res_matches_long = re.findall(r'(\w+)\s*=\s*\[\[(.*?)\]\]', block_content)
+        for field, value in res_matches_long:
+            item_data[field] = value
+
+        overrides[item_id] = item_data
+    return overrides
+
+def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, tipboxes):
     lines = []
 
-    # 1. Base stats
     if item.get('Type') == 'Weapon':
-        lines.append(f"Class: {item.get('SubType', 'N/A')}")
-        lines.append(f"Attack: {item.get('Attack', 0)}")
+        lines.append(f"Class:^0000FF {item.get('SubType', 'N/A')}^000000")
+        lines.append(f"Attack:^009900 {item.get('Attack', 0)}^000000")
         if item.get('MagicAttack'):
-            lines.append(f"Magic Attack: {item.get('MagicAttack')}")
-        lines.append(f"Property: {item.get('Property', 'Neutral')}")
-        lines.append(f"Weapon Level: {item.get('WeaponLevel', 1)}")
+            lines.append(f"Magic Attack:^009900 {item.get('MagicAttack')}^000000")
+        lines.append(f"Property:^0000FF {item.get('Property', 'Neutral')}^000000")
+        lines.append(f"Weapon Level:^009900 {item.get('WeaponLevel', 1)}^000000")
     elif item.get('Type') == 'Armor':
-        lines.append(f"Class: {item.get('SubType', 'Armor')}")
-        lines.append(f"Defense: {item.get('Defense', 0)}")
+        lines.append(f"Class:^0000FF {item.get('SubType', 'Armor')}^000000")
+        lines.append(f"Defense:^009900 {item.get('Defense', 0)}^000000")
         locs = item.get('Locations', {})
         loc_str = ", ".join([k.replace('_', ' ') for k, v in locs.items() if v])
         if loc_str:
-            lines.append(f"Location: {loc_str}")
+            lines.append(f"Location:^0000FF {loc_str}^000000")
 
-    # 2. Requirements
     if item.get('EquipLevelMin'):
-        lines.append(f"Required Level: {item.get('EquipLevelMin')}")
+        lines.append(f"Required Level:^009900 {item.get('EquipLevelMin')}^000000")
 
     if item.get('Jobs'):
         jobs = item.get('Jobs', {})
         if jobs.get('All'):
-            lines.append("Jobs: All")
+            lines.append("Jobs:^0000FF All^000000")
         else:
             job_list = [k for k, v in jobs.items() if v]
             if job_list:
-                lines.append(f"Jobs: {', '.join(job_list)}")
+                lines.append(f"Jobs:^0000FF {', '.join(job_list)}^000000")
 
-    lines.append(f"Weight: {item.get('Weight', 0) / 10}")
+    lines.append(f"Weight:^009900 {item.get('Weight', 0) / 10}^000000")
 
-    # 3. Prices
+    lines.append("^000000________________________^000000")
+
     buy = item.get('Buy')
     sell = item.get('Sell')
     if buy is None and sell is not None:
@@ -208,102 +228,164 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
     if sell is None and buy is not None:
         sell = buy // 2
 
-    if buy: lines.append(f"Buy: {buy}z")
-    if sell: lines.append(f"Sell: {sell}z")
+    lines.append(f"NPC Buy: {buy or 0} Zeny")
+    lines.append(f"NPC Sell: {sell or 0} Zeny")
+    lines.append("Vendor Buy: 0 Zeny")
+    lines.append("Vendor Sell: 0 Zeny")
+
+    item_id = item.get('Id')
 
     # 4. Crafting / Usage
     aegis_name = item.get('AegisName')
     if aegis_name in arrow_crafts:
-        lines.append("--- Arrow Crafting ---")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Arrow Crafting ---^000000")
         for res_name, amount in arrow_crafts[aegis_name]:
-            res_item = items.get(name_to_id.get(res_name), {})
+            res_item_id = name_to_id.get(res_name)
+            res_item = items.get(res_item_id, {})
             res_display = res_item.get('Name', res_name)
-            lines.append(f"Yields: {res_display} x{amount}")
+            if res_item_id:
+                lines.append(f"Yields: <ITEM>{res_display}<INFO>{res_item_id}</INFO></ITEM> x{amount}")
+            else:
+                lines.append(f"Yields: {res_display} x{amount}")
 
-    item_id = item.get('Id')
     if item_id in ing_to_res:
-        lines.append("--- Used In Production ---")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Used In Production ---^000000")
         seen_res = set()
         for res_id, _ in ing_to_res[item_id]:
             if res_id in seen_res: continue
             res_item = items.get(res_id, {})
             res_display = res_item.get('Name', f"Item {res_id}")
-            lines.append(f"- {res_display}")
+            lines.append(f"- <ITEM>{res_display}<INFO>{res_id}</INFO></ITEM>")
             seen_res.add(res_id)
 
     if item_id in res_to_ing:
-        lines.append("--- Production Recipe ---")
-        for ing_id, amount in res_to_ing[item_id]:
-            ing_item = items.get(ing_id, {})
-            ing_display = ing_item.get('Name', f"Item {ing_id}")
-            lines.append(f"- {ing_display} x{amount}")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Production Recipe ---^000000")
+        # Create a tipbox for complex recipes if more than 3 ingredients
+        if len(res_to_ing[item_id]) > 3:
+            tip_id = 10000 + item_id
+            recipe_page = f"Production Recipe for {item.get('Name')}:\\n"
+            for ing_id, amount in res_to_ing[item_id]:
+                ing_item = items.get(ing_id, {})
+                ing_display = ing_item.get('Name', f"Item {ing_id}")
+                recipe_page += f"- <ITEM>{ing_display}<INFO>{ing_id}</INFO></ITEM> x{amount}\\n"
+            tipboxes[tip_id] = {
+                'Title': f"Recipe: {item.get('Name')}",
+                'Page': [recipe_page]
+            }
+            lines.append(f" <TIPBOX>View Production Recipe<INFO>{tip_id}</INFO></TIPBOX>")
+        else:
+            for ing_id, amount in res_to_ing[item_id]:
+                ing_item = items.get(ing_id, {})
+                ing_display = ing_item.get('Name', f"Item {ing_id}")
+                lines.append(f"- <ITEM>{ing_display}<INFO>{ing_id}</INFO></ITEM> x{amount}")
 
     # 5. Combos
     if item_id in item_combos:
-        lines.append("--- Set Bonus ---")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Set Bonus ---^000000")
         for combo in item_combos[item_id]:
             others_str = " + ".join(combo['others'])
             lines.append(f"With {others_str}:")
-            lines.append(f"  {combo['bonus']}")
+            lines.append(f"  ^0000FF{combo['bonus']}^000000")
 
     # 6. Quests
     if item_id in quest_items:
-        lines.append("--- Quest Related ---")
-        for q in quest_items[item_id][:3]:
-            lines.append(f"- {q}")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Quest Related ---^000000")
+        # Tipbox for quests if more than 3
         if len(quest_items[item_id]) > 3:
-            lines.append(f"... and {len(quest_items[item_id]) - 3} more.")
+            tip_id = 20000 + item_id
+            quest_page = f"Quests involving {item.get('Name')}:\\n"
+            for q in quest_items[item_id]:
+                quest_page += f"- {q}\\n"
+            tipboxes[tip_id] = {
+                'Title': f"Quests: {item.get('Name')}",
+                'Page': [quest_page]
+            }
+            lines.append(f" <TIPBOX>View Related Quests<INFO>{tip_id}</INFO></TIPBOX>")
+        else:
+            for q in quest_items[item_id]:
+                lines.append(f"- {q}")
 
     # 7. Drops
     if item_id in item_drops:
-        lines.append("--- Dropped By ---")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Dropped By ---^000000")
         for drop in item_drops[item_id][:5]:
             mvp_str = " (MVP)" if drop['mvp'] else ""
             rate = drop['rate'] / 100
-            lines.append(f"- {drop['mob']}: {rate}%{mvp_str}")
+            lines.append(f"- {drop['mob']}:^009900 {rate}%^000000{mvp_str}")
         if len(item_drops[item_id]) > 5:
             lines.append(f"... and {len(item_drops[item_id]) - 5} more.")
 
     # 8. Original Script
     if item.get('Script'):
-        lines.append("--- Effect ---")
+        lines.append("^FFFFFF_^000000")
+        lines.append("^FF0000--- Effect ---^000000")
         script = item.get('Script').strip()
         script = script.replace('bonus ', '').replace('bonus2 ', '').replace(';', '')
-        lines.append(script)
+        lines.append(f"^0000FF{script}^000000")
 
     return "\\n".join(lines)
 
-def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, output_file):
+def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, lua_overrides, tipboxes, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write("tbl_item_info = {\n")
+        f.write("tbl = {\n")
         for item_id in sorted(items.keys()):
             item = items[item_id]
-            desc = get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos)
+            desc = get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, tipboxes)
+
+            overrides = lua_overrides.get(item_id, {})
+            unid_name = overrides.get('unidentifiedDisplayName', item.get('Name'))
+            unid_res = overrides.get('unidentifiedResourceName', item.get('AegisName'))
+            id_name = overrides.get('identifiedDisplayName', item.get('Name'))
+            id_res = overrides.get('identifiedResourceName', item.get('AegisName'))
 
             f.write(f"  [{item_id}] = {{\n")
-            f.write(f"    unidentifiedDisplayName = [[{item.get('Name')}]],\n")
-            f.write(f"    unidentifiedResourceName = [[{item.get('AegisName')}]],\n")
-            f.write(f"    unidentifiedDescriptionName = {{ [[]] }},\n")
-            f.write(f"    identifiedDisplayName = [[{item.get('Name')}]],\n")
-            f.write(f"    identifiedResourceName = [[{item.get('AegisName')}]],\n")
+            f.write(f"    unidentifiedDisplayName = \"{unid_name}\",\n")
+            f.write(f"    unidentifiedResourceName = \"{unid_res}\",\n")
+            f.write(f"    unidentifiedDescriptionName = {{ \"...\" }},\n")
+            f.write(f"    identifiedDisplayName = \"{id_name}\",\n")
+            f.write(f"    identifiedResourceName = \"{id_res}\",\n")
             f.write(f"    identifiedDescriptionName = {{\n")
             for line in desc.split("\\n"):
-                line = line.replace("[[", "").replace("]]", "")
-                f.write(f"      [[{line}]],\n")
+                line = line.replace('"', '\\"')
+                f.write(f"      \"{line}\",\n")
             f.write(f"    }},\n")
             f.write(f"    slotCount = {item.get('Slots', 0)},\n")
-            f.write(f"    ClassNum = {item.get('View', 0)}\n")
+            f.write(f"    ClassNum = {item.get('View', 0)},\n")
+
+            is_costume = False
+            locs = item.get('Locations', {})
+            for loc in locs:
+                if loc.startswith('Costume_') and locs[loc]:
+                    is_costume = True
+                    break
+            f.write(f"    costume = {'true' if is_costume else 'false'},\n")
             f.write(f"  }},\n")
-        f.write("}\n\n")
-        f.write("function main()\n")
-        f.write("  for ItemID, it in pairs(tbl_item_info) do\n")
-        f.write("    result, msg = AddItem(ItemID, it.unidentifiedDisplayName, it.unidentifiedResourceName, it.unidentifiedDescriptionName, it.identifiedDisplayName, it.identifiedResourceName, it.identifiedDescriptionName, it.slotCount, it.ClassNum)\n")
-        f.write("    if not result then\n")
-        f.write("      return false, msg\n")
-        f.write("    end\n")
-        f.write("  end\n")
-        f.write("  return true, \"ok\"\n")
-        f.write("end\n")
+        f.write("}\n")
+
+def generate_tipbox(tipboxes, output_file):
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("-- Generated TipBox file\n")
+        f.write("iSupport = false\n\n")
+        f.write("tbl = {\n")
+        for tid in sorted(tipboxes.keys()):
+            tip = tipboxes[tid]
+            f.write(f"  [{tid}] = {{\n")
+            f.write(f"    Title = \"{tip['Title']}\",\n")
+            f.write(f"    Search = 1,\n")
+            # Default image or none
+            f.write(f"    Image = \"\",\n")
+            f.write(f"    Page = {{\n")
+            for page in tip['Page']:
+                f.write(f"      \"{page}\",\n")
+            f.write(f"    }}\n")
+            f.write(f"  }},\n")
+        f.write("}\n")
 
 def main():
     base_db_path = 'db/pre-re'
@@ -313,7 +395,9 @@ def main():
     mob_db_path = 'db/pre-re/mob_db.yml'
     combo_db_path = 'db/pre-re/item_combos.yml'
     quest_dir = 'npc/pre-re/quests'
-    output_file = 'itemInfo.lua'
+    input_lua = 'itemInfo.lua'
+    output_lua = 'itemInfo_new.lua'
+    output_tipbox = 'tipbox.lub'
 
     print("Loading item databases...")
     items, name_to_id = parse_item_db(base_db_path, item_files)
@@ -334,8 +418,17 @@ def main():
     print("Loading item combos...")
     item_combos = parse_item_combos(combo_db_path, name_to_id, items)
 
-    print(f"Generating {output_file}...")
-    generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, output_file)
+    print("Parsing existing itemInfo.lua for overrides...")
+    lua_overrides = parse_lua_item_info(input_lua)
+
+    tipboxes = {}
+
+    print(f"Generating {output_lua}...")
+    generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, lua_overrides, tipboxes, output_lua)
+
+    print(f"Generating {output_tipbox}...")
+    generate_tipbox(tipboxes, output_tipbox)
+
     print("Done.")
 
 if __name__ == "__main__":
