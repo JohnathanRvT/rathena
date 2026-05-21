@@ -74,7 +74,99 @@ def parse_produce_db(file_path):
 
     return ing_to_res, res_to_ing
 
-def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing):
+def parse_mob_db(file_path, name_to_id):
+    item_drops = {}
+    data = load_yaml(file_path)
+    if not data or 'Body' not in data:
+        return item_drops
+
+    for mob in data['Body']:
+        mob_name = mob.get('Name')
+        drops = mob.get('Drops', [])
+        mvp_drops = mob.get('MvpDrops', [])
+
+        all_drops = []
+        for d in drops:
+            all_drops.append((d.get('Item'), d.get('Rate'), False))
+        for d in mvp_drops:
+            all_drops.append((d.get('Item'), d.get('Rate'), True))
+
+        for item_name, rate, is_mvp in all_drops:
+            item_id = name_to_id.get(item_name)
+            if item_id:
+                if item_id not in item_drops:
+                    item_drops[item_id] = []
+                item_drops[item_id].append({
+                    'mob': mob_name,
+                    'rate': rate,
+                    'mvp': is_mvp
+                })
+
+    for item_id in item_drops:
+        item_drops[item_id].sort(key=lambda x: x['rate'], reverse=True)
+
+    return item_drops
+
+def parse_quest_scripts(quest_dir):
+    quest_items = {}
+    if not os.path.exists(quest_dir):
+        return quest_items
+
+    pattern = re.compile(r'(getitem|delitem|countitem)\s+(\d+)')
+
+    for root, _, files in os.walk(quest_dir):
+        for file in files:
+            if file.endswith('.txt'):
+                file_path = os.path.join(root, file)
+                quest_name = file.replace('.txt', '').replace('quest_', '').replace('_', ' ').title()
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    try:
+                        content = f.read()
+                        matches = pattern.findall(content)
+                        for _, item_id_str in matches:
+                            item_id = int(item_id_str)
+                            if item_id not in quest_items:
+                                quest_items[item_id] = set()
+                            quest_items[item_id].add(quest_name)
+                    except UnicodeDecodeError:
+                        continue
+
+    return {k: sorted(list(v)) for k, v in quest_items.items()}
+
+def parse_item_combos(file_path, name_to_id, items):
+    # Mapping of Item ID -> List of Combos
+    item_combos = {}
+    data = load_yaml(file_path)
+    if not data or 'Body' not in data:
+        return item_combos
+
+    for entry in data['Body']:
+        script = entry.get('Script', '').strip()
+        script = script.replace('bonus ', '').replace('bonus2 ', '').replace(';', '')
+
+        combos_list = entry.get('Combos', [])
+        for combo_entry in combos_list:
+            combo_items_names = combo_entry.get('Combo', [])
+            combo_items_ids = []
+            for name in combo_items_names:
+                iid = name_to_id.get(name)
+                if iid:
+                    combo_items_ids.append(iid)
+
+            if len(combo_items_ids) >= 2:
+                for iid in combo_items_ids:
+                    if iid not in item_combos:
+                        item_combos[iid] = []
+
+                    # Other items in this combo
+                    others = [items[oid].get('Name') for oid in combo_items_ids if oid != iid]
+                    item_combos[iid].append({
+                        'others': others,
+                        'bonus': script
+                    })
+    return item_combos
+
+def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos):
     lines = []
 
     # 1. Base stats
@@ -120,7 +212,6 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
     if sell: lines.append(f"Sell: {sell}z")
 
     # 4. Crafting / Usage
-    # Arrow Crafting
     aegis_name = item.get('AegisName')
     if aegis_name in arrow_crafts:
         lines.append("--- Arrow Crafting ---")
@@ -129,7 +220,6 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
             res_display = res_item.get('Name', res_name)
             lines.append(f"Yields: {res_display} x{amount}")
 
-    # Production (Ingredient)
     item_id = item.get('Id')
     if item_id in ing_to_res:
         lines.append("--- Used In Production ---")
@@ -141,7 +231,6 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
             lines.append(f"- {res_display}")
             seen_res.add(res_id)
 
-    # Production (Result)
     if item_id in res_to_ing:
         lines.append("--- Production Recipe ---")
         for ing_id, amount in res_to_ing[item_id]:
@@ -149,21 +238,47 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
             ing_display = ing_item.get('Name', f"Item {ing_id}")
             lines.append(f"- {ing_display} x{amount}")
 
-    # 5. Original Script (simplistic)
+    # 5. Combos
+    if item_id in item_combos:
+        lines.append("--- Set Bonus ---")
+        for combo in item_combos[item_id]:
+            others_str = " + ".join(combo['others'])
+            lines.append(f"With {others_str}:")
+            lines.append(f"  {combo['bonus']}")
+
+    # 6. Quests
+    if item_id in quest_items:
+        lines.append("--- Quest Related ---")
+        for q in quest_items[item_id][:3]:
+            lines.append(f"- {q}")
+        if len(quest_items[item_id]) > 3:
+            lines.append(f"... and {len(quest_items[item_id]) - 3} more.")
+
+    # 7. Drops
+    if item_id in item_drops:
+        lines.append("--- Dropped By ---")
+        for drop in item_drops[item_id][:5]:
+            mvp_str = " (MVP)" if drop['mvp'] else ""
+            rate = drop['rate'] / 100
+            lines.append(f"- {drop['mob']}: {rate}%{mvp_str}")
+        if len(item_drops[item_id]) > 5:
+            lines.append(f"... and {len(item_drops[item_id]) - 5} more.")
+
+    # 8. Original Script
     if item.get('Script'):
         lines.append("--- Effect ---")
         script = item.get('Script').strip()
-        script = script.replace('bonus ', '').replace(';', '')
+        script = script.replace('bonus ', '').replace('bonus2 ', '').replace(';', '')
         lines.append(script)
 
     return "\\n".join(lines)
 
-def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, output_file):
+def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("tbl_item_info = {\n")
         for item_id in sorted(items.keys()):
             item = items[item_id]
-            desc = get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing)
+            desc = get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos)
 
             f.write(f"  [{item_id}] = {{\n")
             f.write(f"    unidentifiedDisplayName = [[{item.get('Name')}]],\n")
@@ -172,9 +287,7 @@ def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, output
             f.write(f"    identifiedDisplayName = [[{item.get('Name')}]],\n")
             f.write(f"    identifiedResourceName = [[{item.get('AegisName')}]],\n")
             f.write(f"    identifiedDescriptionName = {{\n")
-            # Splitting by \n for multi-line Lua array
             for line in desc.split("\\n"):
-                # Escape any brackets in the line
                 line = line.replace("[[", "").replace("]]", "")
                 f.write(f"      [[{line}]],\n")
             f.write(f"    }},\n")
@@ -197,6 +310,9 @@ def main():
     item_files = ['item_db_etc.yml', 'item_db_equip.yml', 'item_db_usable.yml']
     arrow_db_path = 'db/create_arrow_db.yml'
     produce_db_path = 'db/pre-re/produce_db.txt'
+    mob_db_path = 'db/pre-re/mob_db.yml'
+    combo_db_path = 'db/pre-re/item_combos.yml'
+    quest_dir = 'npc/pre-re/quests'
     output_file = 'itemInfo.lua'
 
     print("Loading item databases...")
@@ -209,8 +325,17 @@ def main():
     print("Loading production database...")
     ing_to_res, res_to_ing = parse_produce_db(produce_db_path)
 
+    print("Loading monster database for drops...")
+    item_drops = parse_mob_db(mob_db_path, name_to_id)
+
+    print("Parsing quest scripts for item relevance...")
+    quest_items = parse_quest_scripts(quest_dir)
+
+    print("Loading item combos...")
+    item_combos = parse_item_combos(combo_db_path, name_to_id, items)
+
     print(f"Generating {output_file}...")
-    generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, output_file)
+    generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, output_file)
     print("Done.")
 
 if __name__ == "__main__":
