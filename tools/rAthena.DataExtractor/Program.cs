@@ -14,8 +14,8 @@ namespace rAthena.DataExtractor
     {
         static void Main(string[] args)
         {
-            var rAthenaPath = "../../";
-            var outputFolder = "../rAthena.Simulator/wwwroot/data";
+            var rAthenaPath = "C:\\dev\\Ragnarok-Portable\\Ragnarok-Portable\\Ragnarok\\Emulator\\";
+            var outputFolder = "C:\\dev\\Ragnarok-Portable\\Ragnarok-Portable\\Ragnarok\\Emulator\\tools\\rAthena.Simulator\\wwwroot\\data";
             Directory.CreateDirectory(outputFolder);
 
             var deserializer = new DeserializerBuilder()
