@@ -18,20 +18,28 @@ namespace rAthena.Simulator.Core
                 double totalZenyHr = 0;
                 var mobDetails = new List<MobRecommendationDetail>();
 
-                foreach (var spawn in map)
+                // Aggregating spawn amounts first to avoid duplicates in display
+                var mapSpawns = map.GroupBy(s => s.MobId).Select(g => new { MobId = g.Key, Amount = g.Sum(s => s.Amount) });
+
+                foreach (var spawn in mapSpawns)
                 {
                     var mob = data.Mobs.FirstOrDefault(m => m.Id == spawn.MobId);
                     if (mob == null) continue;
 
-                    // Improved MVP detection
                     if (settings.ExcludeMvp && mob.MvpExp > 0) continue;
 
+                    // Unbeatable check: if hit chance is 5% (cap) and we can't do enough damage
+                    double hitChance = (80.0 + stats.Hit - mob.Dex) / 100.0;
+                    if (hitChance < 0.10) continue; // Heuristic: Skip if < 10% hit chance
+
                     double ttk = Calculator.CalculateTTK(stats, mob, build);
+                    if (double.IsInfinity(ttk) || ttk > 300) continue; // Skip if takes > 5 mins to kill one
+
                     double killsPerHour = 3600.0 / ttk;
 
-                    // Factor in spawn amount: if 1 mob spawns, we can't kill 100/hr if it has 5 min spawn time
-                    // But simplified: 1 mob = max 30 kills/hr, etc.
-                    killsPerHour = Math.Min(killsPerHour, spawn.Amount * 100);
+                    // Capacity check: Can't kill more than what's available
+                    double mapCapacityHr = spawn.Amount * 120.0;
+                    killsPerHour = Math.Min(killsPerHour, mapCapacityHr);
 
                     double expHr = killsPerHour * mob.BaseExp * settings.BaseExpRate * settings.ExpManual;
 

@@ -4,7 +4,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JSRuntime
 
-<MudText Typo="Typo.h4" GutterBottom="true">Character Simulator</MudText>
+<MudText Typo="Typo.h4" GutterBottom="true">rAthena Stat Simulator</MudText>
 
 @if (simulatorData == null)
 {
@@ -15,9 +15,9 @@ else
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
         <MudTabPanel Text="Character">
             <MudGrid Class="pa-4">
-                <MudItem xs="12" md="6">
+                <MudItem xs="12" md="4">
                     <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6">Character Input</MudText>
+                        <MudText Typo="Typo.h6">Profile</MudText>
                         <MudTextField Value="currentBuild.Name" Label="Build Name" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.Name = s; Calculate(); })" />
 
                         <MudSelect T="string" Label="Job" Value="currentBuild.Job" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.Job = s; Calculate(); })">
@@ -30,26 +30,11 @@ else
                         <MudNumericField Value="currentBuild.BaseLevel" Label="Base Level" Min="1" Max="99" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((int v) => { currentBuild.BaseLevel = v; Calculate(); })" />
                         <MudNumericField Value="currentBuild.JobLevel" Label="Job Level" Min="1" Max="70" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((int v) => { currentBuild.JobLevel = v; Calculate(); })" />
 
-                        <MudSelect T="string" Label="Weapon Type" Value="currentBuild.WeaponType" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.WeaponType = s; Calculate(); })">
-                            <MudSelectItem Value="@("Fist")">Fist</MudSelectItem>
-                            <MudSelectItem Value="@("Dagger")">Dagger</MudSelectItem>
-                            <MudSelectItem Value="@("1hSword")">1h Sword</MudSelectItem>
-                            <MudSelectItem Value="@("2hSword")">2h Sword</MudSelectItem>
-                            <MudSelectItem Value="@("1hSpear")">1h Spear</MudSelectItem>
-                            <MudSelectItem Value="@("2hSpear")">2h Spear</MudSelectItem>
-                            <MudSelectItem Value="@("1hAxe")">1h Axe</MudSelectItem>
-                            <MudSelectItem Value="@("2hAxe")">2h Axe</MudSelectItem>
-                            <MudSelectItem Value="@("Mace")">Mace</MudSelectItem>
-                            <MudSelectItem Value="@("2hMace")">2h Mace</MudSelectItem>
-                            <MudSelectItem Value="@("Staff")">Staff</MudSelectItem>
-                            <MudSelectItem Value="@("2hStaff")">2h Staff</MudSelectItem>
-                            <MudSelectItem Value="@("Bow")">Bow</MudSelectItem>
-                            <MudSelectItem Value="@("Knuckle")">Knuckle</MudSelectItem>
-                            <MudSelectItem Value="@("Musical")">Musical</MudSelectItem>
-                            <MudSelectItem Value="@("Whip")">Whip</MudSelectItem>
-                            <MudSelectItem Value="@("Book")">Book</MudSelectItem>
-                            <MudSelectItem Value="@("Katar")">Katar</MudSelectItem>
-                        </MudSelect>
+                        <MudAutocomplete T="ItemData" Label="Weapon" Value="selectedWeapon" SearchFunc="@SearchWeapons" ToStringFunc="@(i => i?.Name)" ValueChanged="OnWeaponChanged" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        @if (selectedWeapon != null)
+                        {
+                            <MudNumericField Value="currentBuild.WeaponRefine" Label="Refine" Min="0" Max="10" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((int v) => { currentBuild.WeaponRefine = v; Calculate(); })" />
+                        }
 
                         <MudSelect T="string" Label="Combat Style" Value="currentBuild.CombatStyle" Variant="Variant.Outlined" Margin="Margin.Dense" ValueChanged="@((string s) => { currentBuild.CombatStyle = s; Calculate(); })">
                             <MudSelectItem Value="@("Auto-Attack")">Auto-Attack</MudSelectItem>
@@ -59,34 +44,42 @@ else
                             }
                         </MudSelect>
 
+                        <MudText Typo="Typo.subtitle2" Class="mt-2">Buffs</MudText>
                         <MudGrid>
-                            <MudItem xs="4"><MudNumericField Value="currentBuild.Str" Label="STR" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Str = v; Calculate(); })" /></MudItem>
-                            <MudItem xs="4"><MudNumericField Value="currentBuild.Agi" Label="AGI" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Agi = v; Calculate(); })" /></MudItem>
-                            <MudItem xs="4"><MudNumericField Value="currentBuild.Vit" Label="VIT" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Vit = v; Calculate(); })" /></MudItem>
-                            <MudItem xs="4"><MudNumericField Value="currentBuild.Int" Label="INT" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Int = v; Calculate(); })" /></MudItem>
-                            <MudItem xs="4"><MudNumericField Value="currentBuild.Dex" Label="DEX" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Dex = v; Calculate(); })" /></MudItem>
-                            <MudItem xs="4"><MudNumericField Value="currentBuild.Luk" Label="LUK" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Luk = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="6"><MudCheckBox Value="currentBuild.HasBlessing" Label="Blessing" Dense="true" ValueChanged="@((bool b) => { currentBuild.HasBlessing = b; Calculate(); })" /></MudItem>
+                            <MudItem xs="6"><MudCheckBox Value="currentBuild.HasAgiUp" Label="Agi Up" Dense="true" ValueChanged="@((bool b) => { currentBuild.HasAgiUp = b; Calculate(); })" /></MudItem>
+                            <MudItem xs="6"><MudCheckBox Value="currentBuild.UseAspdPotion" Label="ASPD Potion" Dense="true" ValueChanged="@((bool b) => { currentBuild.UseAspdPotion = b; Calculate(); })" /></MudItem>
                         </MudGrid>
 
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveBuild" Class="mt-4">Save Build</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveBuild" Class="mt-4" FullWidth="true">Save Build</MudButton>
                     </MudPaper>
                 </MudItem>
 
-                <MudItem xs="12" md="6">
+                <MudItem xs="12" md="4">
                     <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6">Calculated Stats</MudText>
+                        <MudText Typo="Typo.h6">Base Stats</MudText>
+                        <MudGrid>
+                            <MudItem xs="12"><MudNumericField Value="currentBuild.Str" Label="STR" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Str = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="12"><MudNumericField Value="currentBuild.Agi" Label="AGI" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Agi = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="12"><MudNumericField Value="currentBuild.Vit" Label="VIT" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Vit = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="12"><MudNumericField Value="currentBuild.Int" Label="INT" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Int = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="12"><MudNumericField Value="currentBuild.Dex" Label="DEX" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Dex = v; Calculate(); })" /></MudItem>
+                            <MudItem xs="12"><MudNumericField Value="currentBuild.Luk" Label="LUK" Min="1" Max="99" ValueChanged="@((int v) => { currentBuild.Luk = v; Calculate(); })" /></MudItem>
+                        </MudGrid>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" md="4">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6">Status</MudText>
                         @if (stats != null)
                         {
-                            <MudList T="string">
-                                <MudListItem>HP: @stats.MaxHp</MudListItem>
-                                <MudListItem>SP: @stats.MaxSp</MudListItem>
-                                <MudListItem>ATK: @stats.Atk</MudListItem>
-                                <MudListItem>MATK: @stats.MinMatk - @stats.MaxMatk</MudListItem>
-                                <MudListItem>ASPD: @stats.Aspd.ToString("F2")</MudListItem>
-                                <MudListItem>HIT: @stats.Hit</MudListItem>
-                                <MudListItem>FLEE: @stats.Flee</MudListItem>
-                                <MudListItem>Cast Time reduction: @((1 - stats.VariableCastTimeRatio).ToString("P0"))</MudListItem>
-                            </MudList>
+                            <MudTable Items="GetStatLines()" Dense="true" Elevation="0">
+                                <RowTemplate>
+                                    <MudTd><b>@context.Label</b></MudTd>
+                                    <MudTd Style="text-align: right">@context.Value</MudTd>
+                                </RowTemplate>
+                            </MudTable>
                         }
                     </MudPaper>
 
@@ -103,11 +96,33 @@ else
             </MudGrid>
         </MudTabPanel>
 
+        <MudTabPanel Text="Damage Test">
+            <MudGrid Class="pa-4">
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6">Target Monster</MudText>
+                        <MudAutocomplete T="MobData" Label="Monster" Value="targetMob" SearchFunc="@SearchMobs" ToStringFunc="@(m => m?.Name)" ValueChanged="OnMobChanged" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+                        @if (targetMob != null && stats != null)
+                        {
+                            <MudDivider Class="my-4" />
+                            <MudText Typo="Typo.h6">Breakdown</MudText>
+                            <MudList T="string">
+                                <MudListItem>Hit Chance: @(( (80.0 + stats.Hit - targetMob.Dex) / 100.0 ).ToString("P0"))</MudListItem>
+                                <MudListItem>TTK: @(Calculator.CalculateTTK(stats, targetMob, currentBuild).ToString("N2"))s</MudListItem>
+                                <MudListItem>Kills/hr: @((3600.0 / Calculator.CalculateTTK(stats, targetMob, currentBuild)).ToString("N0"))</MudListItem>
+                            </MudList>
+                        }
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+
         <MudTabPanel Text="Recommendations">
             <MudGrid Class="pa-4">
-                <MudItem xs="12" md="4">
+                <MudItem xs="12" md="3">
                     <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6">Settings</MudText>
+                        <MudText Typo="Typo.h6">Simulation Settings</MudText>
                         <MudNumericField @bind-Value="baseExpRate" Label="Base Exp Rate" Min="1" />
                         <MudNumericField @bind-Value="dropRate" Label="Drop Rate" Min="1" />
                         <MudSelect T="double" Label="Exp Manual" @bind-Value="expManual">
@@ -116,14 +131,14 @@ else
                             <MudSelectItem Value="2.0">Battle Manual (100%)</MudSelectItem>
                             <MudSelectItem Value="3.0">Special Manual (200%)</MudSelectItem>
                         </MudSelect>
-                        <MudCheckBox @bind-Value="useGum" Label="Use Bubble Gum" />
-                        <MudCheckBox @bind-Value="useOc" Label="Use Overcharge" />
-                        <MudCheckBox @bind-Value="excludeMvp" Label="Exclude MVPs" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RunSimulation" Class="mt-4" FullWidth="true">Run Recommendation</MudButton>
+                        <MudCheckBox @bind-Value="useGum" Label="Use Bubble Gum" Color="Color.Primary" />
+                        <MudCheckBox @bind-Value="useOc" Label="Use Overcharge" Color="Color.Primary" />
+                        <MudCheckBox @bind-Value="excludeMvp" Label="Exclude MVPs" Color="Color.Primary" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="RunSimulation" Class="mt-4" FullWidth="true">Run Analysis</MudButton>
                     </MudPaper>
                 </MudItem>
-                <MudItem xs="12" md="8">
-                    <MudTable Items="recommendations" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isSimulating">
+                <MudItem xs="12" md="9">
+                    <MudTable Items="recommendations" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isSimulating" FixedHeader="true" Height="600px">
                         <HeaderContent>
                             <MudTh></MudTh>
                             <MudTh>Map</MudTh>
@@ -175,6 +190,8 @@ else
     private CharacterBuild currentBuild = new();
     private CharacterStats? stats;
     private List<CharacterBuild> savedBuilds = new();
+    private ItemData? selectedWeapon;
+    private MobData? targetMob;
 
     private int baseExpRate = 1;
     private int dropRate = 1;
@@ -200,13 +217,60 @@ else
         }
     }
 
+    private async Task<IEnumerable<ItemData>> SearchWeapons(string value, CancellationToken token)
+    {
+        if (simulatorData == null) return Array.Empty<ItemData>();
+        if (string.IsNullOrEmpty(value)) return simulatorData.Items.Where(i => i.Type == "Weapon").Take(10);
+        return simulatorData.Items.Where(i => i.Type == "Weapon" && i.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase)).Take(20);
+    }
+
+    private void OnWeaponChanged(ItemData item)
+    {
+        selectedWeapon = item;
+        currentBuild.WeaponId = item?.Id ?? 0;
+        Calculate();
+    }
+
+    private async Task<IEnumerable<MobData>> SearchMobs(string value, CancellationToken token)
+    {
+        if (simulatorData == null) return Array.Empty<MobData>();
+        if (string.IsNullOrEmpty(value)) return simulatorData.Mobs.Take(10);
+        return simulatorData.Mobs.Where(m => m.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase)).Take(20);
+    }
+
+    private void OnMobChanged(MobData mob)
+    {
+        targetMob = mob;
+        currentBuild.TargetMobId = mob?.Id ?? 0;
+        Calculate();
+    }
+
+    private IEnumerable<StatLine> GetStatLines()
+    {
+        if (stats == null) yield break;
+        yield return new StatLine("HP", $"{stats.MaxHp}");
+        yield return new StatLine("SP", $"{stats.MaxSp}");
+        yield return new StatLine("STR", $"{currentBuild.Str} + {stats.TotalStr - currentBuild.Str}");
+        yield return new StatLine("AGI", $"{currentBuild.Agi} + {stats.TotalAgi - currentBuild.Agi}");
+        yield return new StatLine("VIT", $"{currentBuild.Vit} + {stats.TotalVit - currentBuild.Vit}");
+        yield return new StatLine("INT", $"{currentBuild.Int} + {stats.TotalInt - currentBuild.Int}");
+        yield return new StatLine("DEX", $"{currentBuild.Dex} + {stats.TotalDex - currentBuild.Dex}");
+        yield return new StatLine("LUK", $"{currentBuild.Luk} + {stats.TotalLuk - currentBuild.Luk}");
+        yield return new StatLine("ATK", $"{stats.Atk} + {stats.WeaponAtk}");
+        yield return new StatLine("MATK", $"{stats.MinMatk} ~ {stats.MaxMatk}");
+        yield return new StatLine("ASPD", $"{stats.Aspd:F2}");
+        yield return new StatLine("HIT", $"{stats.Hit}");
+        yield return new StatLine("FLEE", $"{stats.Flee}");
+        yield return new StatLine("Cast CT Reduc.", $"{(1 - stats.VariableCastTimeRatio):P0}");
+    }
+
     private async Task SaveBuild()
     {
         if (string.IsNullOrWhiteSpace(currentBuild.Name)) currentBuild.Name = "Unnamed";
         var existing = savedBuilds.FirstOrDefault(b => b.Name == currentBuild.Name);
         if (existing != null) savedBuilds.Remove(existing);
 
-        savedBuilds.Add(new CharacterBuild {
+        var buildToSave = new CharacterBuild {
             Name = currentBuild.Name,
             Job = currentBuild.Job,
             BaseLevel = currentBuild.BaseLevel,
@@ -218,8 +282,15 @@ else
             Dex = currentBuild.Dex,
             Luk = currentBuild.Luk,
             WeaponType = currentBuild.WeaponType,
-            CombatStyle = currentBuild.CombatStyle
-        });
+            CombatStyle = currentBuild.CombatStyle,
+            HasBlessing = currentBuild.HasBlessing,
+            HasAgiUp = currentBuild.HasAgiUp,
+            UseAspdPotion = currentBuild.UseAspdPotion,
+            WeaponId = currentBuild.WeaponId,
+            WeaponRefine = currentBuild.WeaponRefine,
+            TargetMobId = currentBuild.TargetMobId
+        };
+        savedBuilds.Add(buildToSave);
 
         await JSRuntime.InvokeVoidAsync("localStorage.setItem", "savedBuilds", JsonSerializer.Serialize(savedBuilds));
     }
@@ -247,8 +318,16 @@ else
             Dex = b.Dex,
             Luk = b.Luk,
             WeaponType = b.WeaponType,
-            CombatStyle = b.CombatStyle
+            CombatStyle = b.CombatStyle,
+            HasBlessing = b.HasBlessing,
+            HasAgiUp = b.HasAgiUp,
+            UseAspdPotion = b.UseAspdPotion,
+            WeaponId = b.WeaponId,
+            WeaponRefine = b.WeaponRefine,
+            TargetMobId = b.TargetMobId
         };
+        selectedWeapon = simulatorData?.Items.FirstOrDefault(i => i.Id == currentBuild.WeaponId);
+        targetMob = simulatorData?.Mobs.FirstOrDefault(m => m.Id == currentBuild.TargetMobId);
         Calculate();
     }
 
@@ -268,4 +347,6 @@ else
 
         isSimulating = false;
     }
+
+    public record StatLine(string Label, string Value);
 }

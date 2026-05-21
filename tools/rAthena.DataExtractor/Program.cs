@@ -84,7 +84,14 @@ namespace rAthena.DataExtractor
                             Buy = GetInt(dict, "Buy"),
                             Sell = GetInt(dict, "Sell"),
                             Weight = GetInt(dict, "Weight"),
-                            Type = GetString(dict, "Type")
+                            Type = GetString(dict, "Type"),
+                            Attack = GetInt(dict, "Attack"),
+                            MagicAttack = GetInt(dict, "MagicAttack"),
+                            Defense = GetInt(dict, "Defense"),
+                            Slots = GetInt(dict, "Slots"),
+                            WeaponLevel = GetInt(dict, "WeaponLevel"),
+                            Locations = GetString(dict, "Locations"),
+                            EquipLevelMin = GetInt(dict, "EquipLevelMin")
                         };
                         items.Add(item);
                     }
@@ -117,11 +124,11 @@ namespace rAthena.DataExtractor
                             Hp = GetInt(dict, "Hp"),
                             BaseExp = GetInt(dict, "BaseExp"),
                             JobExp = GetInt(dict, "JobExp"),
+                            MvpExp = GetInt(dict, "MvpExp"),
                             Attack = GetInt(dict, "Attack"),
                             Attack2 = GetInt(dict, "Attack2"),
                             Defense = GetInt(dict, "Defense"),
                             MagicDefense = GetInt(dict, "MagicDefense"),
-                            MvpExp = GetInt(dict, "MvpExp"),
                             Str = GetInt(dict, "Str"),
                             Agi = GetInt(dict, "Agi"),
                             Vit = GetInt(dict, "Vit"),
@@ -160,10 +167,11 @@ namespace rAthena.DataExtractor
         static List<JobData> ParseJobs(string root, IDeserializer deserializer)
         {
             var jobs = new List<JobData>();
-            var fullPath = Path.Combine(root, "db/pre-re/job_stats.yml");
-            if (File.Exists(fullPath))
+
+            var statsPath = Path.Combine(root, "db/pre-re/job_stats.yml");
+            if (File.Exists(statsPath))
             {
-                var yamlContent = File.ReadAllText(fullPath);
+                var yamlContent = File.ReadAllText(statsPath);
                 var doc = deserializer.Deserialize<Dictionary<string, object>>(yamlContent);
                 if (doc != null && doc.ContainsKey("Body") && doc["Body"] is List<object> body)
                 {
@@ -217,6 +225,54 @@ namespace rAthena.DataExtractor
                     }
                 }
             }
+
+            var basepointsPath = Path.Combine(root, "db/pre-re/job_basepoints.yml");
+            if (File.Exists(basepointsPath))
+            {
+                var yamlContent = File.ReadAllText(basepointsPath);
+                var doc = deserializer.Deserialize<Dictionary<string, object>>(yamlContent);
+                if (doc != null && doc.ContainsKey("Body") && doc["Body"] is List<object> body)
+                {
+                    foreach (var groupObj in body)
+                    {
+                        var groupDict = groupObj as Dictionary<object, object>;
+                        if (groupDict == null) continue;
+
+                        var baseHp = new List<JobLevelData>();
+                        if (groupDict.ContainsKey("BaseHp") && groupDict["BaseHp"] is List<object> hpList)
+                        {
+                            foreach (var hpObj in hpList)
+                            {
+                                var hpDict = hpObj as Dictionary<object, object>;
+                                if (hpDict != null) baseHp.Add(new JobLevelData { Level = GetInt(hpDict, "Level"), Value = GetInt(hpDict, "Hp") });
+                            }
+                        }
+
+                        var baseSp = new List<JobLevelData>();
+                        if (groupDict.ContainsKey("BaseSp") && groupDict["BaseSp"] is List<object> spList)
+                        {
+                            foreach (var spObj in spList)
+                            {
+                                var spDict = spObj as Dictionary<object, object>;
+                                if (spDict != null) baseSp.Add(new JobLevelData { Level = GetInt(spDict, "Level"), Value = GetInt(spDict, "Sp") });
+                            }
+                        }
+
+                        if (groupDict.ContainsKey("Jobs") && groupDict["Jobs"] is Dictionary<object, object> jobsDict)
+                        {
+                            foreach (var jobNameObj in jobsDict.Keys)
+                            {
+                                var jobName = jobNameObj.ToString();
+                                foreach (var job in jobs.Where(j => j.Name == jobName))
+                                {
+                                    if (baseHp.Any()) job.BaseHp = baseHp;
+                                    if (baseSp.Any()) job.BaseSp = baseSp;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             return jobs;
         }
 
@@ -234,7 +290,12 @@ namespace rAthena.DataExtractor
         {
             if (dict.ContainsKey(key))
             {
-                return dict[key]?.ToString() ?? "";
+                var val = dict[key];
+                if (val is Dictionary<object, object> d)
+                {
+                    return string.Join(",", d.Keys.Select(k => k.ToString()));
+                }
+                return val?.ToString() ?? "";
             }
             return "";
         }

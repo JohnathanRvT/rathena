@@ -4,47 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pre-Renewal Bow & Card Slot Optimizer | Ragnarok Online</title>
-    <meta name="description" content="Ultimate Pre-Renewal Ragnarok Online bow damage calculator and slot optimizer. Analyzes all bows, elemental arrows, cards, and refine levels.">
+    <meta name="description" content="Ultimate Pre-Renewal Ragnarok Online bow damage calculator and slot optimizer. Automatically finds the best bow, arrow, and card combination for any target monster.">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Optimizing all bows…</div>
+    </div>
+
     <header>
         <h1>Pre-Renewal Bow Calculator</h1>
-        <div class="subtitle">Ultimate Bow &amp; Card Slot Optimizer</div>
+        <div class="subtitle">Automatic Bow · Arrow · Card Slot Optimizer</div>
     </header>
 
     <main class="dashboard-grid">
-        <!-- Column 1: Player Stats & Target Monster -->
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- Column 1 — Player Stats & Target Monster                      -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <section class="glass-card left-panel">
+
             <h2><span>👤</span> Player Stats</h2>
-            
+
             <div class="input-row">
                 <div class="form-group">
-                    <label for="dex-input">DEX (Base + Job)</label>
+                    <label for="dex-input">DEX</label>
                     <input type="number" id="dex-input" min="1" max="150" value="99">
                 </div>
                 <div class="form-group">
-                    <label for="str-input">STR (Base + Job)</label>
+                    <label for="str-input">STR</label>
                     <input type="number" id="str-input" min="1" max="99" value="10">
                 </div>
             </div>
 
             <div class="form-group">
-                <label for="luk-input">LUK (Base + Job)</label>
+                <label for="luk-input">LUK</label>
                 <input type="number" id="luk-input" min="1" max="99" value="10">
             </div>
 
             <div class="form-group slider-container">
                 <div class="slider-header">
-                    <label for="refine-input">Bow Refine Level</label>
+                    <label for="refine-input">Refine Level</label>
                     <span id="refine-val" class="slider-value">+0</span>
                 </div>
                 <input type="range" id="refine-input" min="0" max="10" value="0">
-                <button id="btn-safe-refine" class="btn btn-secondary">Set Safe Refine Level</button>
+                <button id="btn-safe-refine" class="btn btn-secondary" style="margin-top:0.8rem">
+                    Set Safe Refine
+                </button>
             </div>
 
+            <!-- ── Target Monster ── -->
             <h2 style="margin-top: 1.5rem;"><span>👹</span> Target Monster</h2>
-            
+
             <div class="form-group">
                 <label for="target-size">Size</label>
                 <select id="target-size">
@@ -87,104 +101,133 @@
                 </div>
             </div>
 
-            <div class="form-group">
-                <label for="target-def">Hard DEF</label>
-                <input type="number" id="target-def" min="0" max="100" value="0">
+            <div class="input-row">
+                <div class="form-group">
+                    <label for="target-def">Hard DEF</label>
+                    <input type="number" id="target-def" min="0" max="100" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="target-class">Class</label>
+                    <select id="target-class">
+                        <option value="Normal" selected>Normal</option>
+                        <option value="Boss">Boss</option>
+                    </select>
+                </div>
             </div>
-
-            <!-- SVG Graph comparison -->
-            <div id="chart-container" class="chart-container"></div>
         </section>
 
-        <!-- Column 2: Weapon Selection & Damage Details -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- Column 2 — Weapon Details (read-only, driven by ranking)      -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <section class="center-panel">
+
             <div class="glass-card primary-calculator-card">
-                <h2><span>🏹</span> Weapon Config</h2>
-                
-                <div class="form-group">
-                    <label for="bow-select">Select Bow</label>
-                    <select id="bow-select"></select>
+                <h2><span>🏹</span> Weapon Details</h2>
+
+                <!-- Placeholder shown before first selection -->
+                <div id="weapon-details-empty" class="details-placeholder">
+                    <div class="placeholder-icon">⏳</div>
+                    <p>Running optimizer…</p>
                 </div>
 
-                <div class="form-group">
-                    <label for="arrow-select">Equipped Arrow</label>
-                    <select id="arrow-select"></select>
-                </div>
+                <!-- Populated once a bow is selected from the ranking -->
+                <div id="weapon-details-content" style="display:none">
 
-                <div class="form-group">
-                    <label>Card Slots (Click to slot manually)</label>
-                    <div id="slots-container" class="slots-container"></div>
-                </div>
+                    <!-- Bow Header -->
+                    <div class="selected-weapon-header">
+                        <div class="selected-weapon-title">
+                            <h3 id="selected-bow-name"></h3>
+                            <span id="selected-bow-badge" class="badge badge-level"></span>
+                        </div>
+                        <div id="selected-bow-meta" class="item-meta"></div>
+                    </div>
 
-                <button id="btn-optimize-cards" class="btn">✨ Auto-Optimize Cards</button>
+                    <!-- Best Arrow -->
+                    <div class="detail-section">
+                        <div class="detail-section-label">Best Arrow</div>
+                        <div class="detail-arrow-pill">
+                            <span class="arrow-icon">➜</span>
+                            <div>
+                                <div id="selected-arrow-name" class="arrow-name"></div>
+                                <div id="selected-arrow-detail" class="arrow-detail"></div>
+                            </div>
+                        </div>
+                    </div>
 
-                <div class="bow-details-grid">
-                    <div class="stat-item">
-                        <div class="label">Status ATK</div>
-                        <div id="stat-status-atk" class="value">0</div>
+                    <!-- Optimal Cards -->
+                    <div class="detail-section">
+                        <div class="detail-section-label">Optimal Cards</div>
+                        <div id="detail-cards-container" class="slots-grid"></div>
                     </div>
-                    <div class="stat-item">
-                        <div class="label">Weapon ATK</div>
-                        <div id="stat-weapon-atk" class="value">0</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="label">Element Mod</div>
-                        <div id="stat-ele-mod" class="value accent">100%</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="label">Size Penalty</div>
-                        <div id="stat-size-penalty" class="value">100%</div>
-                    </div>
-                </div>
 
-                <div class="damage-details">
-                    <div class="damage-line">
-                        <span>Base Bow ATK</span>
-                        <span id="detail-base-atk" class="high">0</span>
+                    <!-- Stat Boxes Grid -->
+                    <div class="bow-details-grid">
+                        <div class="stat-item">
+                            <div class="label">Status ATK</div>
+                            <div id="stat-status-atk" class="value">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="label">Weapon ATK</div>
+                            <div id="stat-weapon-atk" class="value">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="label">Element Mod</div>
+                            <div id="stat-ele-mod" class="value accent">100%</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="label">Size Penalty</div>
+                            <div id="stat-size-penalty" class="value">100%</div>
+                        </div>
                     </div>
-                    <div class="damage-line">
-                        <span>Refine Bonus ATK</span>
-                        <span id="detail-refine-atk" class="high">0</span>
-                    </div>
-                    <div class="damage-line">
-                        <span>Arrow ATK</span>
-                        <span id="detail-arrow-atk" class="high">0</span>
-                    </div>
-                    <div class="damage-line" style="flex-direction: column; gap: 0.2rem; align-items: flex-start;">
-                        <span>Card Multipliers</span>
-                        <span id="detail-card-multipliers" style="font-size: 0.8rem; color: var(--accent-secondary);">Race: x1.00 | Element: x1.00 | Size: x1.00 | Ranged: x1.00</span>
-                    </div>
-                    <div id="combo-notice" style="display: none; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.5rem; text-align: center; background: rgba(0, 255, 204, 0.08); padding: 0.4rem; border-radius: 8px; border: 1px solid rgba(0, 255, 204, 0.2);">
-                        🔥 ACTIVE BOW + ARROW COMBO
-                    </div>
-                    <div class="damage-line">
-                        <span>Estimated Damage</span>
-                        <span id="detail-final-damage" class="high bold accent">0</span>
+
+                    <!-- Damage Breakdown -->
+                    <div class="damage-details">
+                        <div class="damage-line">
+                            <span>Base Bow ATK</span>
+                            <span id="detail-base-atk" class="high">0</span>
+                        </div>
+                        <div class="damage-line">
+                            <span>Refine + Card Flat ATK</span>
+                            <span id="detail-refine-atk" class="high">0</span>
+                        </div>
+                        <div class="damage-line">
+                            <span>Arrow ATK</span>
+                            <span id="detail-arrow-atk" class="high">0</span>
+                        </div>
+                        <div class="damage-line" style="flex-direction:column;gap:0.2rem;align-items:flex-start;">
+                            <span>Card Multipliers</span>
+                            <span id="detail-card-multipliers" style="font-size:0.8rem;color:var(--accent-secondary);">
+                                Race ×1.00 · Ele ×1.00 · Size ×1.00 · Ranged ×1.00
+                            </span>
+                        </div>
+                        <div id="combo-notice" class="combo-notice" style="display:none;">
+                            🔥 COMBO ACTIVE
+                        </div>
+                        <div class="damage-line">
+                            <span>Estimated Damage</span>
+                            <span id="detail-final-damage" class="high bold accent">0</span>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <!-- DEX Milestone Chart -->
+            <div id="chart-container" class="glass-card chart-container"></div>
         </section>
 
-        <!-- Column 3: Best Bow Rankings -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- Column 3 — Best Bow Rankings                                  -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
         <section class="glass-card">
             <h2><span>🏆</span> Best Bow Rankings</h2>
-            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.2rem; margin-top: -0.8rem;">
-                Ranked dynamically by theoretical safe-refinement maximum damage, auto-optimizing cards for the target monster.
+            <p class="ranking-subtitle">
+                Every bow ranked with its optimal arrow &amp; card combination at safe refine.
+                Click any row to inspect.
             </p>
             <div id="ranked-bows-container" class="best-bows-list"></div>
         </section>
-    </main>
 
-    <!-- Card Selection Modal -->
-    <div id="card-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Select Weapon Card</h3>
-                <button id="modal-close" class="modal-close">&times;</button>
-            </div>
-            <div id="card-options-list"></div>
-        </div>
-    </div>
+    </main>
 
     <!-- Scripts -->
     <script src="db_data.js"></script>

@@ -19,6 +19,27 @@ namespace rAthena.Simulator.Core.Models
         public string WeaponType { get; set; } = "Fist";
         public string CombatStyle { get; set; } = "Auto-Attack";
         public bool UseAspdPotion { get; set; }
+        public bool HasAgiUp { get; set; }
+        public bool HasBlessing { get; set; }
+
+        public int HeadTopId { get; set; }
+        public int HeadMidId { get; set; }
+        public int HeadLowId { get; set; }
+        public int ArmorId { get; set; }
+        public int WeaponId { get; set; }
+        public int ShieldId { get; set; }
+        public int GarmentId { get; set; }
+        public int ShoesId { get; set; }
+        public int Accessory1Id { get; set; }
+        public int Accessory2Id { get; set; }
+
+        public int WeaponRefine { get; set; }
+        public int ArmorRefine { get; set; }
+        public int ShieldRefine { get; set; }
+        public int GarmentRefine { get; set; }
+        public int ShoesRefine { get; set; }
+
+        public int TargetMobId { get; set; }
     }
 
     public class CharacterStats
@@ -32,6 +53,7 @@ namespace rAthena.Simulator.Core.Models
         public int TotalDex { get; set; }
         public int TotalLuk { get; set; }
         public int Atk { get; set; }
+        public int WeaponAtk { get; set; }
         public int MinMatk { get; set; }
         public int MaxMatk { get; set; }
         public double Aspd { get; set; }
@@ -82,6 +104,13 @@ namespace rAthena.Simulator.Core.Models
         public int Sell { get; set; }
         public int Weight { get; set; }
         public string Type { get; set; } = "";
+        public int Attack { get; set; }
+        public int MagicAttack { get; set; }
+        public int Defense { get; set; }
+        public int Slots { get; set; }
+        public int WeaponLevel { get; set; }
+        public string Locations { get; set; } = "";
+        public int EquipLevelMin { get; set; }
     }
 
     public class MapSpawn
@@ -99,6 +128,8 @@ namespace rAthena.Simulator.Core.Models
         public int SpFactor { get; set; }
         public int SpIncrease { get; set; }
         public List<JobBonus> Bonuses { get; set; } = new List<JobBonus>();
+        public List<JobLevelData> BaseHp { get; set; } = new();
+        public List<JobLevelData> BaseSp { get; set; } = new();
     }
 
     public class JobBonus
@@ -110,6 +141,12 @@ namespace rAthena.Simulator.Core.Models
         public int Int { get; set; }
         public int Dex { get; set; }
         public int Luk { get; set; }
+    }
+
+    public class JobLevelData
+    {
+        public int Level { get; set; }
+        public int Value { get; set; }
     }
 
     public class SkillData
@@ -140,3 +177,10 @@ namespace rAthena.Simulator.Core.Models
         public List<CharacterBuild> SavedBuilds { get; set; } = new List<CharacterBuild>();
     }
 }
+
+    public class BuffData
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public Dictionary<string, int> Bonus { get; set; } = new();
+    }
