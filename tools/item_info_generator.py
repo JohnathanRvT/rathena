@@ -141,7 +141,6 @@ def parse_item_combos(file_path, name_to_id, items):
 
     for entry in data['Body']:
         script = entry.get('Script', '').strip()
-        script = script.replace('bonus ', '').replace('bonus2 ', '').replace(';', '')
 
         combos_list = entry.get('Combos', [])
         for combo_entry in combos_list:
@@ -186,6 +185,17 @@ def parse_lua_item_info(file_path):
 
         overrides[item_id] = item_data
     return overrides
+
+def clean_script(script):
+    if not script: return ""
+    lines = []
+    for line in script.split('\n'):
+        line = line.strip()
+        if not line: continue
+        line = line.replace('bonus ', '').replace('bonus2 ', '').replace('bonus3 ', '').replace(';', '')
+        if line:
+            lines.append(line)
+    return "\\n".join(lines)
 
 def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_drops, quest_items, item_combos, tipboxes):
     lines = []
@@ -263,7 +273,6 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
     if item_id in res_to_ing:
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Production Recipe ---^000000")
-        # Create a tipbox for complex recipes if more than 3 ingredients
         if len(res_to_ing[item_id]) > 3:
             tip_id = 10000 + item_id
             recipe_page = f"Production Recipe for {item.get('Name')}:\\n"
@@ -289,13 +298,14 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
         for combo in item_combos[item_id]:
             others_str = " + ".join(combo['others'])
             lines.append(f"With {others_str}:")
-            lines.append(f"  ^0000FF{combo['bonus']}^000000")
+            bonus = clean_script(combo['bonus'])
+            for bline in bonus.split("\\n"):
+                lines.append(f"  ^0000FF{bline}^000000")
 
     # 6. Quests
     if item_id in quest_items:
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Quest Related ---^000000")
-        # Tipbox for quests if more than 3
         if len(quest_items[item_id]) > 3:
             tip_id = 20000 + item_id
             quest_page = f"Quests involving {item.get('Name')}:\\n"
@@ -325,9 +335,9 @@ def get_description(item, items, name_to_id, arrow_crafts, ing_to_res, res_to_in
     if item.get('Script'):
         lines.append("^FFFFFF_^000000")
         lines.append("^FF0000--- Effect ---^000000")
-        script = item.get('Script').strip()
-        script = script.replace('bonus ', '').replace('bonus2 ', '').replace(';', '')
-        lines.append(f"^0000FF{script}^000000")
+        script = clean_script(item.get('Script'))
+        for sline in script.split("\\n"):
+            lines.append(f"^0000FF{sline}^000000")
 
     return "\\n".join(lines)
 
@@ -351,6 +361,7 @@ def generate_lua(items, name_to_id, arrow_crafts, ing_to_res, res_to_ing, item_d
             f.write(f"    identifiedDisplayName = \"{id_name}\",\n")
             f.write(f"    identifiedResourceName = \"{id_res}\",\n")
             f.write(f"    identifiedDescriptionName = {{\n")
+            # Splitting by \\n to ensure each line in the Lua array is correctly quoted
             for line in desc.split("\\n"):
                 line = line.replace('"', '\\"')
                 f.write(f"      \"{line}\",\n")
@@ -378,7 +389,6 @@ def generate_tipbox(tipboxes, output_file):
             f.write(f"  [{tid}] = {{\n")
             f.write(f"    Title = \"{tip['Title']}\",\n")
             f.write(f"    Search = 1,\n")
-            # Default image or none
             f.write(f"    Image = \"\",\n")
             f.write(f"    Page = {{\n")
             for page in tip['Page']:
