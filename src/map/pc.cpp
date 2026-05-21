@@ -1454,6 +1454,7 @@ void pc_setnewpc(map_session_data *sd, uint32 account_id, uint32 char_id, int32 
 		sd->canlog_tick = gettick();
 	//Required to prevent homunculus copuing a base speed of 0.
 	sd->battle_status.speed = sd->base_status.speed = DEFAULT_WALK_SPEED;
+	sd->gear_score = 0;
 }
 
 /**
@@ -9648,6 +9649,57 @@ int32 pc_skillheal2_bonus(map_session_data *sd, uint16 skill_id) {
 	}
 
 	return bonus;
+}
+
+/**
+ * Calculates gear score based on current equipment.
+ * Formula: (Weapon/ArmorLevel * 100) + ATK + MATK + (DEF * 5) + (Refine^2 * 10) + (Cards * 50)
+ * @param sd: Player data
+ */
+void pc_calc_gear_score(map_session_data *sd) {
+	int32 score = 0;
+	bool processed[MAX_INVENTORY];
+
+	nullpo_retv(sd);
+
+	memset(processed, 0, sizeof(processed));
+
+	for (int i = 0; i < EQI_MAX; i++) {
+		int16 index = sd->equip_index[i];
+
+		if (index < 0 || index >= MAX_INVENTORY || processed[index])
+			continue;
+
+		processed[index] = true;
+
+		struct item *it = &sd->status.inventory[index];
+		struct item_data *id = sd->inventory_data[index];
+
+		if (!id)
+			continue;
+
+		// Base score from item level
+		score += (id->weapon_level + id->armor_level) * 100;
+
+		// Stat bonuses
+		score += id->atk;
+		score += id->def * 5;
+#ifdef RENEWAL
+		score += id->matk;
+#endif
+
+		// Refine bonus
+		if (it->refine > 0)
+			score += (it->refine * it->refine) * 10;
+
+		// Card bonus
+		for (int j = 0; j < MAX_SLOTS; j++) {
+			if (it->card[j] != 0)
+				score += 50;
+		}
+	}
+
+	sd->gear_score = score;
 }
 
 void pc_respawn(map_session_data* sd, clr_type clrtype)

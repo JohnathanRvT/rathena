@@ -11419,6 +11419,79 @@ int32 atcommand_macrochecker_sub( block_list* bl, va_list ap ){
 	return 1;
 }
 
+/**
+ * Displays the player's gear score.
+ * @param fd: File descriptor
+ * @param sd: Player data
+ * @param command: Command name
+ * @param message: Command arguments
+ * @return 0 on success, -1 on failure
+ */
+ACMD_FUNC(gearscore) {
+	char out[256];
+
+	nullpo_retr(-1, sd);
+
+	safesnprintf(out, sizeof(out), "Your current Gear Score: %d", sd->gear_score);
+	clif_displaymessage(fd, out);
+
+	return 0;
+}
+
+/**
+ * Displays the top 10 online players by gear score.
+ * @param fd: File descriptor
+ * @param sd: Player data
+ * @param command: Command name
+ * @param message: Command arguments
+ * @return 0 on success, -1 on failure
+ */
+ACMD_FUNC(gearrank) {
+	map_session_data* pl_sd = nullptr;
+	struct s_mapiterator* iter = nullptr;
+	struct {
+		char name[NAME_LENGTH];
+		int32 score;
+	} top[10];
+	int32 count = 0;
+	char out[256];
+
+	nullpo_retr(-1, sd);
+
+	memset(top, 0, sizeof(top));
+
+	iter = mapit_getallusers();
+	for (pl_sd = (TBL_PC*)mapit_first(iter); mapit_exists(iter); pl_sd = (TBL_PC*)mapit_next(iter)) {
+		if (pl_sd->gear_score <= 0)
+			continue;
+
+		for (int i = 0; i < 10; i++) {
+			if (pl_sd->gear_score > top[i].score) {
+				for (int j = 9; j > i; j--) {
+					top[j] = top[j - 1];
+				}
+				safestrncpy(top[i].name, pl_sd->status.name, NAME_LENGTH);
+				top[i].score = pl_sd->gear_score;
+				if (count < 10) count++;
+				break;
+			}
+		}
+	}
+	mapit_free(iter);
+
+	clif_displaymessage(fd, "--- Top 10 Gear Scores ---");
+	if (count == 0) {
+		clif_displaymessage(fd, "No ranked players online.");
+	} else {
+		for (int i = 0; i < count; i++) {
+			safesnprintf(out, sizeof(out), "%d. %s - %d", i + 1, top[i].name, top[i].score);
+			clif_displaymessage(fd, out);
+		}
+	}
+
+	return 0;
+}
+
 ACMD_FUNC(macrochecker){
 	int16 mapid;
 
@@ -11486,6 +11559,8 @@ void atcommand_basecommands(void) {
 		ACMD_DEF(jumpto),
 		ACMD_DEF(jump),
 		ACMD_DEF(who),
+		ACMD_DEF(gearscore),
+		ACMD_DEF(gearrank),
 		ACMD_DEF2("who2", who),
 		ACMD_DEF2("who3", who),
 		ACMD_DEF2("whomap", who),
