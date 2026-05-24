@@ -5006,8 +5006,6 @@ int32 status_calc_pc_( map_session_data* sd, uint8 opt ){
 		script_attach_state( previous_st );
 	}
 
-	pc_calc_gear_score(sd);
-
 	// Return the original return value
 	return ret;
 }
